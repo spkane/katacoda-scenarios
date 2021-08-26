@@ -1,5 +1,5 @@
-# Ubuntu Linux 20.04 Sandbox (spkane)
+# Ubuntu 20.04
 
-This sandbox has been designed to support students taking classes taught by Sean Kane.
+This sandbox has been designed to support students taking Linux based classes.
 
 There are no defined steps in this scenario, since it is intended to be used during live classes.

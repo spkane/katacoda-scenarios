@@ -1,5 +1,5 @@
 {
-  "title": "Ubuntu 20.04 Sandbox",
+  "title": "Prod Ops Classroom (Ubuntu 20.04)",
   "description": "A sandbox for students taking live classes",
   "difficulty": "Beginner",
   "time": "3 hours",
@@ -21,6 +21,6 @@
     "uilayout": "terminal-iframe"
   },
   "backend": {
-    "imageid": "ubuntu:2004"
+    "imageid": "spkane-prodops"
   }
 }
