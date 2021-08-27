@@ -3,13 +3,132 @@
 set -eu
 
 KIND_VERSION="v0.11.1"
+DOCKER_COMPOSE_V1_VERSION="1.29.2"
+DOCKER_COMPOSE_v2_VERSION="v2.0.0-rc.1"
 
 touch ~/.bashrc
 
 # Fix an underlying bug in Katacoda's Unbuntu:2004 image
 curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
 
-sudo apt-get  install -y bash-completion
+sudo apt-get  install -y \
+    bash-completion
+
+# grub
+sed -i 's/GRUB_CMDLINE_LINUX=""/GRUB_CMDLINE_LINUX="cgroup_enable=memory swapaccount=1"/' /etc/default/grub
+update-grub
+
+# bashrc
+echo '' >> ~/.bashrc
+
+cat << "EOF" >> ~/.bashrc
+set -o vi
+
+shopt -s checkwinsize
+shopt -s histappend
+
+export HISTSIZE=5000
+export HISTFILESIZE=5000
+export HISTCONTROL=ignoreboth:erasedups
+export HISTTIMEFORMAT="%d/%m/%y %T "
+export HISTIGNORE="ls:pwd:clear:reset:[bf]g:exit"
+export LC_CTYPE=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+export CLICOLOR=1
+export LSCOLORS=gxBxhxDxfxhxhxhxhxcxcx
+export GREP_COLOR='1;30;43'
+export TERM=xterm
+
+alias vi="vim -y"
+alias vim="vim -y"
+EOF
+
+# Install Starship Prompt
+wget -O /tmp/starship.sh https://starship.rs/install.sh
+bash /tmp/starship.sh --force
+rm -f /tmp/starship.sh
+echo 'eval "$(starship init bash)"' >> ~/.bashrc
+mkdir ~/.config
+
+cat << "EOF" > ~/.config/starship.toml
+# Don't print a new line at the start of the prompt
+add_newline = false
+
+# use custom prompt order
+format = """\
+    $env_var\
+    $username\
+    $hostname\
+    $directory\
+    $kubernetes\
+    $aws\
+    $git_branch\
+    $git_commit\
+    $git_state\
+    $git_status\
+    $hg_branch\
+    $package\
+    $dotnet\
+    $golang\
+    $java\
+    $nodejs\
+    $python\
+    $ruby\
+    $rust\
+    $terraform\
+    $nix_shell\
+    $conda\
+    $memory_usage\
+    $cmd_duration\
+    $line_break\
+    $jobs\
+    $battery\
+    $time\
+    $character\
+    """
+
+# Wait 30 milliseconds for starship to check files under the current directory.
+scan_timeout = 30
+
+[aws]
+format = '[$symbol $profile($region)]($style) '
+style = '#668cff'
+symbol = '🅰'
+
+[aws.region_aliases]
+us-east-1 = 'use1'
+us-east-2 = 'use2'
+us-west-1 = 'usw1'
+us-west-2 = 'usw2'
+
+[directory]
+truncation_length = 3
+
+[golang]
+format = '[$symbol$version]($style)'
+
+[hostname]
+ssh_only = true
+format = '⟪[$hostname]($style)⟫'
+trim_at = '.'
+disabled = false
+
+[kubernetes]
+format = '[$symbol$context\($namespace\)]($style) '
+symbol = '⛵'
+style = 'green'
+disabled = false
+
+[python]
+format = '[${symbol}${pyenv_prefix}${version}($virtualenv)]($style) '
+style = 'yellow'
+
+[ruby]
+format = '[$symbol$version]($style) '
+
+[username]
+disabled = true
+EOF
 
 # Install the official Docker release
 sudo apt-get remove -y docker docker-engine docker.io containerd runc
@@ -29,15 +148,15 @@ sudo apt-get update -y
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io
 
 # Install Docker Compose v1
-sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_V1_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 sudo chmod +x /usr/local/bin/docker-compose
 sudo curl \
-    -L https://raw.githubusercontent.com/docker/compose/1.29.2/contrib/completion/bash/docker-compose \
+    -L https://raw.githubusercontent.com/docker/compose/${DOCKER_COMPOSE_V1_VERSION}/contrib/completion/bash/docker-compose \
     -o /etc/bash_completion.d/docker-compose
 
 # Install Docker Compose v2
  mkdir -p ~/.docker/cli-plugins/
- curl -SL https://github.com/docker/compose-cli/releases/download/v2.0.0-rc.1/docker-compose-linux-amd64 -o ~/.docker/cli-plugins/docker-compose
+ curl -SL https://github.com/docker/compose-cli/releases/download/${DOCKER_COMPOSE_v2_VERSION}/docker-compose-linux-amd64 -o ~/.docker/cli-plugins/docker-compose
  chmod +x ~/.docker/cli-plugins/docker-compose
  
 # Install Terraform
@@ -59,3 +178,4 @@ sudo apt-get install -y kubectl
 curl -Lo ./kind https://kind.sigs.k8s.io/dl/$KIND_VERSION/kind-linux-amd64
 chmod +x ./kind
 sudo install -o root -g root -m 0755 kind /usr/local/bin/kind
+rm -f ./kind
