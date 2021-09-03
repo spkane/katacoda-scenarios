@@ -2,17 +2,30 @@
 
 set -eu
 
-KIND_VERSION="v0.11.1"
 DOCKER_COMPOSE_V1_VERSION="1.29.2"
 DOCKER_COMPOSE_v2_VERSION="v2.0.0-rc.1"
+GITHUB_CLI_VERSION="2.0.0"
+GO_VERSION="1.16.7"
+KIND_VERSION="v0.11.1"
+YQ_VERSION="4.12.1"
+
+cd /tmp
 
 touch ~/.bashrc
 
 # Fix an underlying bug in Katacoda's Unbuntu:2004 image
-curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
+curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -
 
-sudo apt-get  install -y \
-    bash-completion
+# Remove suspect SSH private key
+rm -f ~/.ssh/id_rsa
+rm -f ~/.ssh/authorized_keys
+
+apt-get update  
+apt-get -y upgrade 
+
+apt-get  install -y \
+    bash-completion \
+    fonts-firacode
 
 # grub
 sed -i 's/GRUB_CMDLINE_LINUX=""/GRUB_CMDLINE_LINUX="cgroup_enable=memory swapaccount=1"/' /etc/default/grub
@@ -130,27 +143,50 @@ format = '[$symbol$version]($style) '
 disabled = true
 EOF
 
+# Update Go
+rm -rf /usr/local/go
+wget "https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz"
+tar -xvf go${GO_VERSION}.linux-amd64.tar.gz
+mv go /usr/local
+
+# Install Github CLI
+wget "https://github.com/cli/cli/releases/download/v${GITHUB_CLI_VERSION}/gh_${GITHUB_CLI_VERSION}_linux_amd64.deb"
+DEBIAN_FRONTEND=noninteractive dpkg -i gh_${GITHUB_CLI_VERSION}_linux_amd64.deb
+
+# Install yq
+wget "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64"
+install -o root -g root -m 0755 yq_linux_amd64 /usr/local/bin/yq
+
 # Install the official Docker release
-sudo apt-get remove -y docker docker-engine docker.io containerd runc
-sudo apt-get autoremove -y
-sudo apt-get update -y
-sudo apt-get install -y \
+apt-get remove -y docker docker-engine docker.io containerd runc
+apt-get autoremove -y
+apt-get update -y
+apt-get install -y \
     apt-transport-https \
     ca-certificates \
     curl \
     gnupg \
     lsb-release
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 echo \
   "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
-  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt-get update -y
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+  $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+apt-get update -y
+apt-get install -y docker-ce docker-ce-cli containerd.io
+
+# Change the storage driver to overlay2
+sed -i s/"overlay"/"overlay2"/ /etc/docker/daemon.json
+systemctl restart docker
+
+# Setup docker buildx multiarch builder
+docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+docker buildx create --name builder --driver docker-container --use
+docker buildx inspect --bootstrap
 
 # Install Docker Compose v1
-sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_V1_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-sudo curl \
+curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_V1_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+curl \
     -L https://raw.githubusercontent.com/docker/compose/${DOCKER_COMPOSE_V1_VERSION}/contrib/completion/bash/docker-compose \
     -o /etc/bash_completion.d/docker-compose
 
@@ -160,22 +196,24 @@ sudo curl \
  chmod +x ~/.docker/cli-plugins/docker-compose
  
 # Install Terraform
-sudo apt-get update -y && sudo apt-get install -y gnupg software-properties-common curl
-curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
-sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-sudo apt-get update -y && sudo apt-get install -y terraform
+apt-get update -y && apt-get install -y gnupg software-properties-common curl
+curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
+apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+apt-get update -y && apt-get install -y terraform
 terraform -install-autocomplete
 
 # Install kubectl
-sudo apt-get update -y
-sudo apt-get install -y apt-transport-https ca-certificates curl
-sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
-echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-sudo apt-get update -y
-sudo apt-get install -y kubectl
+apt-get update -y
+apt-get install -y apt-transport-https ca-certificates curl
+curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | tee /etc/apt/sources.list.d/kubernetes.list
+apt-get update -y
+apt-get install -y kubectl
 
 # Install Kind
 curl -Lo ./kind https://kind.sigs.k8s.io/dl/$KIND_VERSION/kind-linux-amd64
 chmod +x ./kind
-sudo install -o root -g root -m 0755 kind /usr/local/bin/kind
+install -o root -g root -m 0755 kind /usr/local/bin/kind
 rm -f ./kind
+
+exit 0
