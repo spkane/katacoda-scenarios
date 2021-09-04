@@ -2,6 +2,8 @@
 
 set -eu
 
+date '+%Y%m%d-%H%M%S' > /etc/build_timestamp
+
 DOCKER_COMPOSE_V1_VERSION="1.29.2"
 DOCKER_COMPOSE_v2_VERSION="v2.0.0-rc.1"
 GITHUB_CLI_VERSION="2.0.0"
