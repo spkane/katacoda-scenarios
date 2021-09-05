@@ -1,17 +1,81 @@
 #!/usr/bin/env bash
 
+# NOTE: Katacoda appears to use the dash shell to run this script.
+
 set -eu
 
+# Debug Info
+readlink /proc/$$/exe
+bash --version
+
 date '+%Y%m%d-%H%M%S' > /etc/build_timestamp
+
+cd /tmp
 
 DOCKER_COMPOSE_V1_VERSION="1.29.2"
 DOCKER_COMPOSE_v2_VERSION="v2.0.0-rc.1"
 GITHUB_CLI_VERSION="2.0.0"
 GO_VERSION="1.16.7"
+HELM_VERSION="3.6.3"
 KIND_VERSION="v0.11.1"
 YQ_VERSION="4.12.1"
 
+# Install VSCODE extensions using Bash since katacoda appears to use dash
+cat << "VSCEXTEOF" > /tmp/vsc-ext.sh
+#!/usr/bin/env bash
+
+set -eu
+
+# VSCODE Extensions
+VSC_EXTNAME=("vscode-yaml" "vscode-docker" "vscode-kubernetes-tools" "kind-vscode" "gitlens" "Go" "terraform" "marp-vscode")
+VSC_EXT_PUB=("redhat" "ms-azuretools" "ms-kubernetes-tools" "ms-kubernetes-tools" "eamodio" "golang" "HashiCorp" "marp-team")
+VSC_EXT_VER=("0.17.0" "1.1.0" "1.2.4" "0.0.3" "10.2.3" "0.14.4" "2.3.0" "0.18.0")
+# Some of these extension releases are pretty old to work with the version of vscode that Katacoda uses.
+# Does not work on Katacoda (code-server fork?): "remote-containers" "ms-vscode-remote" "0.194.0"
+# To new to use with Katacoda: "mindaro" "mindaro" "1.0.120210803"
+
+# Install VSCODE extensions
+
 cd /tmp
+mkdir -p /opt/.katacodacode/extensions/
+apt-get update -y
+apt install libarchive-tools -y
+
+for i in "${!VSC_EXTNAME[@]}"
+do
+  echo "Downloading: ${VSC_EXT_PUB[$i]}.${VSC_EXTNAME[$i]}-${VSC_EXT_VER[$i]}"
+  curl -L https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${VSC_EXT_PUB[$i]}/vsextensions/${VSC_EXTNAME[$i]}/${VSC_EXT_VER[$i]}/vspackage | bsdtar -xvf - extension
+  mv extension /opt/.katacodacode/extensions/${VSC_EXT_PUB[$i]}.${VSC_EXTNAME[$i]}-${VSC_EXT_VER[$i]}
+done
+
+exit 0
+VSCEXTEOF
+
+bash /tmp/vsc-ext.sh
+
+# Configure VSCODE
+
+mkdir -p /opt/.katacodacode/user-data/User/
+
+cat << "VSCODEEOF" > /opt/.katacodacode/user-data/User/settings.json
+{
+  "workbench.startupEditor": "none",
+  "files.autoSave": "on",
+  "editor.minimap.enabled": false,
+  "window.autoDetectColorScheme": false,
+  "workbench.colorCustomizations": {},
+  "workbench.colorTheme": "Default Dark+",
+  "editor.semanticHighlighting.enabled": false,
+  "editor.tokenColorCustomizations": {
+      "semanticHighlighting": true
+  },
+  "files.exclude": {
+    "**/.*": true
+  },
+  "gitlens.showWelcomeOnInstall": false,
+  "gitlens.showWhatsNewAfterUpgrades": false
+}
+VSCODEEOF
 
 touch ~/.bashrc
 
@@ -22,16 +86,16 @@ curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -
 rm -f ~/.ssh/id_rsa
 rm -f ~/.ssh/authorized_keys
 
-apt-get update  
-apt-get -y upgrade 
+apt-get update
+apt-get -y upgrade
 
 apt-get  install -y \
     bash-completion \
     fonts-firacode
 
 # grub
-sed -i 's/GRUB_CMDLINE_LINUX=""/GRUB_CMDLINE_LINUX="cgroup_enable=memory swapaccount=1"/' /etc/default/grub
-update-grub
+#sed -i 's/GRUB_CMDLINE_LINUX=""/GRUB_CMDLINE_LINUX="cgroup_enable=memory swapaccount=1"/' /etc/default/grub
+#update-grub
 
 # bashrc
 echo '' >> ~/.bashrc
@@ -196,7 +260,7 @@ curl \
  mkdir -p ~/.docker/cli-plugins/
  curl -SL https://github.com/docker/compose-cli/releases/download/${DOCKER_COMPOSE_v2_VERSION}/docker-compose-linux-amd64 -o ~/.docker/cli-plugins/docker-compose
  chmod +x ~/.docker/cli-plugins/docker-compose
- 
+
 # Install Terraform
 apt-get update -y && apt-get install -y gnupg software-properties-common curl
 curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
@@ -212,9 +276,13 @@ echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https:/
 apt-get update -y
 apt-get install -y kubectl
 
+# Install Helm
+curl -Lo ./helm https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz
+install -o root -g root -m 0755 helm /usr/local/bin/helm
+rm -f ./helm
+
 # Install Kind
 curl -Lo ./kind https://kind.sigs.k8s.io/dl/$KIND_VERSION/kind-linux-amd64
-chmod +x ./kind
 install -o root -g root -m 0755 kind /usr/local/bin/kind
 rm -f ./kind
 
